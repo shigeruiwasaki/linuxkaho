@@ -1,0 +1,393 @@
+export struct DiskItem { device: string, title: string, detail: string }
+
+export global AppState {
+    // 0 ようこそ / 1 アカウント / 2 ディスク / 3 確認 / 4 インストール中 / 5 完了 / 6 エラー
+    in-out property <int> step: 0;
+    in-out property <string> full-name;
+    in-out property <string> username;
+    in-out property <string> password;
+    in-out property <string> password2;
+    in-out property <string> form-error;
+    in-out property <[DiskItem]> disks;
+    in-out property <int> selected-disk: -1;
+    in-out property <float> progress: 0;
+    in-out property <string> status-title;
+    in-out property <string> status-text;
+    in-out property <string> error-title;
+    in-out property <string> error-text;
+    in-out property <bool> erase-ok: false;
+    callback validate-account() -> string;
+    callback refresh-disks();
+    callback start-install();
+    callback reboot();
+}
+
+component Btn inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: true;
+    in property <bool> danger: false;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 200px;
+    height: 52px;
+    border-radius: 26px;
+    background: !root.enabled ? #e5e5ea : root.danger ? (ta.pressed ? #cf3a3f : #e5484d) : root.primary ? (ta.pressed ? #3b82d6 : #4a90e2) : (ta.pressed ? #f3cfdc : #fbe3ec);
+    animate background { duration: 120ms; }
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        font-size: 18px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        color: !root.enabled ? #a0a0a8 : root.primary ? white : #c2477a;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component Field inherits Rectangle {
+    in property <string> label;
+    in-out property <string> value;
+    in property <bool> secret: false;
+    height: 56px;
+    border-radius: 14px;
+    background: white;
+    border-width: 1.5px;
+    border-color: ti.has-focus ? #4a90e2 : #e5e5ea;
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        spacing: 12px;
+        Text {
+            width: 130px;
+            text: root.label;
+            font-size: 16px;
+            color: #6e6e73;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+            ti := TextInput {
+                text <=> root.value;
+                input-type: root.secret ? InputType.password : InputType.text;
+                font-size: 17px;
+                color: #1d1d1f;
+            }
+        }
+    }
+}
+
+component Page inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <length> title-size: 34px;
+    in property <string> next-text: "つぎへ";
+    in property <string> back-text: "もどる";
+    in property <bool> next-enabled: true;
+    in property <bool> next-danger: false;
+    in property <bool> show-back: true;
+    in property <bool> show-buttons: true;
+    callback next();
+    callback back();
+    property <bool> shown: false;
+    init => { root.shown = true; }
+    opacity: root.shown ? 1 : 0;
+    animate opacity { duration: 400ms; easing: ease-out; }
+
+    VerticalLayout {
+        padding-left: 64px;
+        padding-right: 64px;
+        padding-top: 56px;
+        padding-bottom: 40px;
+        spacing: 14px;
+        Text {
+            text: root.title;
+            font-size: root.title-size;
+            font-weight: 700;
+            color: #1d1d1f;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: root.subtitle;
+            font-size: 17px;
+            color: #6e6e73;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+        }
+        VerticalLayout {
+            vertical-stretch: 1;
+            padding-top: 16px;
+            @children
+        }
+        if root.show-buttons : HorizontalLayout {
+            spacing: 16px;
+            alignment: center;
+            if root.show-back : Btn {
+                text: root.back-text;
+                primary: false;
+                clicked => { root.back(); }
+            }
+            Btn {
+                text: root.next-text;
+                enabled: root.next-enabled;
+                danger: root.next-danger;
+                clicked => { root.next(); }
+            }
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    title: "Linux Kaho インストーラー";
+    min-width: 900px;
+    min-height: 640px;
+    preferred-width: 1000px;
+    preferred-height: 700px;
+    background: #fff8fb;
+
+    Rectangle { x: -120px; y: -120px; width: 360px; height: 360px; border-radius: 180px; background: #fde4ee; }
+    Rectangle { x: parent.width - 240px; y: parent.height - 240px; width: 360px; height: 360px; border-radius: 180px; background: #e3eefc; }
+
+    VerticalLayout {
+        width: parent.width;
+        height: parent.height;
+
+        // 0 ようこそ
+        if AppState.step == 0 : Page {
+            title: "こんにちは";
+            title-size: 64px;
+            subtitle: "Linux Kaho へようこそ。いくつかの質問に答えるだけで、準備が整います。";
+            next-text: "はじめる";
+            show-back: false;
+            next => { AppState.step = 1; }
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 120px;
+                        height: 120px;
+                        border-radius: 60px;
+                        background: @linear-gradient(135deg, #f4a6c0 0%, #4a90e2 100%);
+                        Text {
+                            width: parent.width;
+                            height: parent.height;
+                            text: "Kaho";
+                            color: white;
+                            font-size: 28px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1 アカウント
+        if AppState.step == 1 : Page {
+            title: "あなたについて教えてください";
+            subtitle: "このコンピューターを使う方のアカウントを作ります。";
+            back => { AppState.step = 0; }
+            next => {
+                AppState.form-error = AppState.validate-account();
+                if (AppState.form-error == "") {
+                    AppState.refresh-disks();
+                    AppState.step = 2;
+                }
+            }
+            HorizontalLayout {
+                alignment: center;
+                VerticalLayout {
+                    width: 520px;
+                    spacing: 14px;
+                    alignment: start;
+                    Field { label: "お名前"; value <=> AppState.full-name; }
+                    Field { label: "ユーザー名"; value <=> AppState.username; }
+                    Field { label: "パスワード"; value <=> AppState.password; secret: true; }
+                    Field { label: "もう一度入力"; value <=> AppState.password2; secret: true; }
+                    Text { text: AppState.form-error; color: #d6336c; font-size: 15px; wrap: word-wrap; }
+                }
+            }
+        }
+
+        // 2 ディスク(アイコンを選んで進むだけの、かんたん画面)
+        if AppState.step == 2 : Page {
+            title: "インストール先を選んでください";
+            subtitle: AppState.selected-disk >= 0 ? "「" + AppState.disks[AppState.selected-disk].title + "」にインストールされます。" : "インストールするディスクをタップしてください。";
+            next-text: "インストール";
+            next-enabled: AppState.selected-disk >= 0;
+            back => { AppState.step = 1; }
+            next => { AppState.erase-ok = false; AppState.step = 3; }
+            VerticalLayout {
+                alignment: center;
+                spacing: 20px;
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 16px;
+                    for d[i] in AppState.disks : Rectangle {
+                        width: 170px;
+                        height: 190px;
+                        border-radius: 18px;
+                        background: AppState.selected-disk == i ? #e3eefc : transparent;
+                        border-width: 2px;
+                        border-color: AppState.selected-disk == i ? #4a90e2 : transparent;
+                        VerticalLayout {
+                            padding: 14px;
+                            spacing: 8px;
+                            alignment: center;
+                            HorizontalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: 96px;
+                                    height: 80px;
+                                    border-radius: 14px;
+                                    background: @linear-gradient(180deg, #d9dde3 0%, #aab1bb 100%);
+                                    Rectangle { x: parent.width - 26px; y: parent.height - 24px; width: 10px; height: 10px; border-radius: 5px; background: #4a90e2; }
+                                }
+                            }
+                            Text { text: d.title; font-size: 15px; font-weight: 600; color: #1d1d1f; wrap: word-wrap; horizontal-alignment: center; }
+                            Text { text: d.detail; font-size: 12px; color: #6e6e73; wrap: word-wrap; horizontal-alignment: center; }
+                        }
+                        TouchArea { clicked => { AppState.selected-disk = i; } }
+                    }
+                }
+                if AppState.disks.length == 0 : Text {
+                    text: "インストール先が見つかりませんでした。ディスクが接続されているかご確認ください。";
+                    color: #6e6e73;
+                    font-size: 16px;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "選んだディスクに保存されているデータは、すべて消去されます。";
+                    color: #c2477a;
+                    font-size: 15px;
+                    font-weight: 600;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                }
+                Rectangle {
+                    height: 28px;
+                    Text {
+                        width: parent.width;
+                        height: parent.height;
+                        text: "もう一度さがす";
+                        color: #4a90e2;
+                        font-size: 15px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    TouchArea { clicked => { AppState.refresh-disks(); } }
+                }
+            }
+        }
+
+        // 3 確認(データ消去の最終確認)
+        if AppState.step == 3 : Page {
+            title: "データが消去されます";
+            subtitle: "「" + AppState.disks[AppState.selected-disk].title + "」のすべてのデータが消え、元に戻せません。大切なデータは保存済みか、ご確認ください。";
+            next-text: "消去してインストール";
+            next-danger: true;
+            next-enabled: AppState.erase-ok;
+            back => { AppState.step = 2; }
+            next => { AppState.start-install(); }
+            VerticalLayout {
+                alignment: center;
+                spacing: 24px;
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 520px;
+                        height: 90px;
+                        border-radius: 16px;
+                        background: #fbe3ec;
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 6px;
+                            Text { text: "アカウント: " + AppState.full-name + "(" + AppState.username + ")"; font-size: 16px; color: #1d1d1f; horizontal-alignment: center; }
+                            Text { text: "インストール先: " + AppState.disks[AppState.selected-disk].detail; font-size: 16px; color: #1d1d1f; horizontal-alignment: center; }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 12px;
+                    Rectangle {
+                        width: 48px;
+                        height: 28px;
+                        border-radius: 14px;
+                        background: AppState.erase-ok ? #34c759 : #d1d1d6;
+                        animate background { duration: 150ms; }
+                        Rectangle {
+                            x: AppState.erase-ok ? 22px : 2px;
+                            y: 2px;
+                            width: 24px;
+                            height: 24px;
+                            border-radius: 12px;
+                            background: white;
+                            animate x { duration: 150ms; }
+                        }
+                        TouchArea { clicked => { AppState.erase-ok = !AppState.erase-ok; } }
+                    }
+                    Text { text: "データが消えることを理解しました"; font-size: 16px; color: #1d1d1f; vertical-alignment: center; }
+                }
+            }
+        }
+
+        // 4 インストール中
+        if AppState.step == 4 : Page {
+            title: "インストールしています";
+            subtitle: "コンピューターの電源を切らず、このままお待ちください。";
+            show-buttons: false;
+            VerticalLayout {
+                alignment: center;
+                spacing: 18px;
+                Text { text: AppState.status-title; font-size: 22px; font-weight: 600; color: #1d1d1f; horizontal-alignment: center; }
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 480px;
+                        height: 10px;
+                        border-radius: 5px;
+                        background: #e5e5ea;
+                        Rectangle {
+                            x: 0px;
+                            width: parent.width * AppState.progress;
+                            height: parent.height;
+                            border-radius: 5px;
+                            background: @linear-gradient(90deg, #f4a6c0 0%, #4a90e2 100%);
+                            animate width { duration: 400ms; easing: ease-out; }
+                        }
+                    }
+                }
+                Text { text: AppState.status-text; font-size: 15px; color: #6e6e73; wrap: word-wrap; horizontal-alignment: center; }
+            }
+        }
+
+        // 5 完了
+        if AppState.step == 5 : Page {
+            title: "準備が整いました";
+            title-size: 52px;
+            subtitle: "Linux Kaho のインストールが完了しました。再起動して、新しい環境を始めましょう。";
+            next-text: "再起動する";
+            show-back: false;
+            next => { AppState.reboot(); }
+        }
+
+        // 6 エラー(CUIには戻らず、必ずこの画面で案内する)
+        if AppState.step == 6 : Page {
+            title: AppState.error-title;
+            subtitle: AppState.error-text;
+            next-text: "もう一度試す";
+            back-text: "最初に戻る";
+            back => { AppState.step = 0; }
+            next => { AppState.erase-ok = false; AppState.step = 3; }
+        }
+    }
+}
